@@ -68,5 +68,5 @@ Assets/
 
 ## Credits
 
-Original C++ game by Mahrukh (22F-3422), Sania (22F-3279), Wareesha (22F-3441).  
+Original C++ game by Wareesha (22F-3441).  
 Unity port extends gameplay while preserving core mechanics.

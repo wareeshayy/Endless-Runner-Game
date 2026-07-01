@@ -69,7 +69,7 @@ namespace ZillRunner.Editor
                 "INSTRUCTIONS\n\nW / Space — Jump\nS — Slide\nA / D — Move lanes\n\nBlue box — Jump OR Slide\nRed box — Jump only",
                 ui);
             var credits = CreateInfoOverlay(canvasTransform, "CreditsPanel",
-                "CREDITS\n\n22F-3422  Mahrukh\n22F-3279  Sania\n22F-3441  Wareesha\n\nUnity Edition — Advanced Port",
+                "CREDITS\n\n22F-3441  Wareesha\n\nUnity Edition — Advanced Port",
                 ui);
             var loading = CreatePanel(canvasTransform, "LoadingPanel", new Color(0, 0, 0, 0.9f));
             CreateTMP(loading, "LoadingText", "LOADING THE GAME...", 32, Vector2.zero, new Vector2(500, 60), FontStyles.Bold);
