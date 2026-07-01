@@ -1,0 +1,13 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!129 &1
+PlayerSettings:
+  productGUID: a1b2c3d4e5f6789012345678abcdef01
+  companyName: ZillRunner
+  productName: ZILL Runner
+  defaultScreenWidth: 1920
+  defaultScreenHeight: 1080
+  defaultScreenOrientation: 4
+  runInBackground: 1
+  apiCompatibilityLevel: 6
+  activeInputHandler: 0

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZILL Runner — Playable Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; }
+    body {
+      background: #0a0f14;
+      color: #e8f4ff;
+      font-family: Consolas, "Courier New", monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    h1 { margin-bottom: 8px; font-size: 1.4rem; letter-spacing: 2px; }
+    #hud {
+      width: min(900px, 100%);
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 0.95rem;
+    }
+    canvas {
+      border: 2px solid #2a4a6a;
+      background: #111820;
+      width: min(900px, 100%);
+      image-rendering: pixelated;
+    }
+    .panel {
+      width: min(900px, 100%);
+      margin-top: 10px;
+      padding: 12px;
+      border: 1px solid #2a4a6a;
+      background: #121a24;
+      line-height: 1.5;
+      font-size: 0.9rem;
+    }
+    button {
+      margin-top: 8px;
+      padding: 10px 18px;
+      background: #2d6cdf;
+      border: none;
+      color: white;
+      font-family: inherit;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    button:hover { background: #3d7cf0; }
+    .overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 12px; text-align: center; padding: 20px;
+    }
+    .hidden { display: none; }
+    input {
+      padding: 8px 12px;
+      font-family: inherit;
+      font-size: 1rem;
+      border: 1px solid #2a4a6a;
+      background: #0d1319;
+      color: white;
+      width: 260px;
+    }
+  </style>
+</head>
+<body>
+  <h1>ZILL RUNNER</h1>
+  <div id="hud">
+    <div id="playerLabel">PLAYER: ---</div>
+    <div id="livesLabel">LIVES: ♥♥♥</div>
+    <div id="scoreLabel">SCORE: 0</div>
+  </div>
+  <canvas id="game" width="900" height="500"></canvas>
+  <div class="panel">
+    <strong>Controls:</strong> A/D or ←/→ = lanes · W/Space/↑ = jump · S/↓ = slide · Esc = pause<br>
+    <strong>Obstacles:</strong> Blue = jump or slide · Red = jump only
+  </div>
+
+  <div id="menu" class="overlay">
+    <h2>ZILL RUNNER</h2>
+    <p>Advanced endless runner (browser demo)<br>Full Unity project in <code>Unity/</code> folder</p>
+    <input id="nameInput" placeholder="Player name" maxlength="20" />
+    <button id="startBtn">START GAME</button>
+  </div>
+  <div id="gameOver" class="overlay hidden">
+    <h2>GAME OVER</h2>
+    <p id="finalScore"></p>
+    <button id="restartBtn">PLAY AGAIN</button>
+  </div>
+  <div id="paused" class="overlay hidden">
+    <h2>PAUSED</h2>
+    <button id="resumeBtn">RESUME</button>
+  </div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const LANES = 3, LANE_W = 120, GROUND_Y = 420;
+let playerName = 'Player', lives = 3, score = 0, speed = 6, lane = 1;
+let jumpY = 0, jumpVy = 0, sliding = false, slideT = 0;
+let obstacles = [], coins = [], paused = false, playing = false;
+let spawnFull = 40, spawnJump = 65, frame = 0;
+
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.key.toLowerCase()] = true;
+  if (e.key === 'Escape' && playing) togglePause();
+});
+document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+document.getElementById('startBtn').onclick = () => {
+  playerName = document.getElementById('nameInput').value.trim() || 'Player';
+  document.getElementById('menu').classList.add('hidden');
+  resetGame();
+};
+document.getElementById('restartBtn').onclick = () => {
+  document.getElementById('gameOver').classList.add('hidden');
+  resetGame();
+};
+document.getElementById('resumeBtn').onclick = () => togglePause();
+
+function togglePause() {
+  paused = !paused;
+  document.getElementById('paused').classList.toggle('hidden', !paused);
+}
+
+function resetGame() {
+  lives = 3; score = 0; speed = 6; lane = 1;
+  jumpY = 0; jumpVy = 0; sliding = false; slideT = 0;
+  obstacles = []; coins = []; spawnFull = 40; spawnJump = 65;
+  frame = 0; playing = true; paused = false;
+  updateHud();
+  requestAnimationFrame(loop);
+}
+
+function laneX(l) { return 150 + l * LANE_W; }
+
+function spawnObstacle(type) {
+  const l = Math.floor(Math.random() * LANES);
+  obstacles.push({ type, lane: l, y: -60, w: 70, h: type === 'full' ? 90 : 70 });
+  score += 50;
+  if (Math.random() < 0.4) {
+    let cl = Math.floor(Math.random() * LANES);
+    while (cl === l) cl = Math.floor(Math.random() * LANES);
+    coins.push({ lane: cl, y: -30, r: 14 });
+  }
+}
+
+function updateHud() {
+  document.getElementById('playerLabel').textContent = 'PLAYER: ' + playerName;
+  document.getElementById('livesLabel').textContent = 'LIVES: ' + '♥'.repeat(Math.max(0, lives));
+  document.getElementById('scoreLabel').textContent = 'SCORE: ' + score;
+}
+
+function handleInput() {
+  if (!playing || paused) return;
+  if (keys['a'] || keys['arrowleft']) { keys['a'] = keys['arrowleft'] = false; lane = Math.max(0, lane - 1); }
+  if (keys['d'] || keys['arrowright']) { keys['d'] = keys['arrowright'] = false; lane = Math.min(2, lane + 1); }
+  if ((keys['w'] || keys[' '] || keys['arrowup']) && jumpY <= 0 && !sliding) {
+    keys['w'] = keys[' '] = keys['arrowup'] = false;
+    jumpVy = 14;
+  }
+  if ((keys['s'] || keys['arrowdown']) && jumpY <= 0 && !sliding) {
+    keys['s'] = keys['arrowdown'] = false;
+    sliding = true; slideT = 28;
+  }
+}
+
+function playerBox() {
+  const x = laneX(lane) - 20;
+  const y = GROUND_Y - jumpY - (sliding ? 25 : 70);
+  const h = sliding ? 35 : 70;
+  return { x, y, w: 40, h };
+}
+
+function hit(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function update() {
+  if (!playing || paused) return;
+  frame++;
+  score += Math.floor(speed / 3);
+  speed = Math.min(14, 6 + frame / 600);
+
+  handleInput();
+  if (jumpVy !== 0 || jumpY > 0) {
+    jumpY += jumpVy; jumpVy -= 0.7;
+    if (jumpY < 0) { jumpY = 0; jumpVy = 0; }
+  }
+  if (sliding) { slideT--; if (slideT <= 0) sliding = false; }
+
+  spawnFull--; spawnJump--;
+  if (spawnFull <= 0) { spawnObstacle('full'); spawnFull = 50 + Math.random() * 20 | 0; }
+  if (spawnJump <= 0) { spawnObstacle('jump'); spawnJump = 70 + Math.random() * 25 | 0; }
+
+  const pb = playerBox();
+  for (const o of obstacles) o.y += speed;
+  for (const c of coins) c.y += speed;
+
+  obstacles = obstacles.filter(o => {
+    const ob = { x: laneX(o.lane) - o.w/2, y: o.y, w: o.w, h: o.h };
+    if (o.lane === lane && o.y > GROUND_Y - 120 && o.y < GROUND_Y + 10) {
+      const ok = o.type === 'full' ? (jumpY > 40 || sliding) : (jumpY > 40);
+      if (!ok) { lives--; updateHud(); if (lives <= 0) endGame(); return false; }
+    }
+    return o.y < canvas.height + 80;
+  });
+
+  coins = coins.filter(c => {
+    const box = { x: laneX(c.lane) - c.r, y: c.y - c.r, w: c.r*2, h: c.r*2 };
+    if (hit(pb, box)) { score += 25; updateHud(); return false; }
+    return c.y < canvas.height + 40;
+  });
+
+  updateHud();
+}
+
+function drawPlayer() {
+  const x = laneX(lane), baseY = GROUND_Y - jumpY;
+  ctx.fillStyle = '#3de8ff';
+  if (sliding) {
+    ctx.fillRect(x - 22, baseY - 30, 44, 28);
+    ctx.fillStyle = '#fff'; ctx.fillRect(x - 6, baseY - 22, 12, 12);
+  } else {
+    ctx.fillRect(x - 18, baseY - 65, 36, 55);
+    ctx.beginPath(); ctx.arc(x, baseY - 72, 14, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.strokeStyle = '#3de8ff'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(x - 12, baseY - 50); ctx.lineTo(x, baseY - 35); ctx.lineTo(x + 12, baseY - 50); ctx.stroke();
+  }
+}
+
+function draw() {
+  ctx.fillStyle = '#0d1319';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (let i = 0; i < LANES; i++) {
+    const x = laneX(i);
+    ctx.fillStyle = i === lane ? '#1a2838' : '#141c28';
+    ctx.fillRect(x - 55, 0, 110, canvas.height);
+    ctx.strokeStyle = '#2a4060'; ctx.strokeRect(x - 55, 0, 110, canvas.height);
+  }
+
+  ctx.strokeStyle = '#4a7aaa'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(0, GROUND_Y); ctx.lineTo(canvas.width, GROUND_Y); ctx.stroke();
+
+  for (const o of obstacles) {
+    const x = laneX(o.lane) - o.w/2;
+    ctx.fillStyle = o.type === 'full' ? '#2d8cff' : '#ff5533';
+    ctx.fillRect(x, o.y, o.w, o.h);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(x, o.y, o.w, o.h);
+    if (o.type === 'jump') {
+      ctx.fillStyle = '#ffcc00';
+      for (let r = 0; r < 3; r++)
+        for (let c = 0; c < 5; c++)
+          ctx.fillRect(x + 8 + c * 12, o.y + 20 + r * 18, 8, 8);
+    }
+  }
+
+  for (const c of coins) {
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath(); ctx.arc(laneX(c.lane), c.y, c.r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  drawPlayer();
+}
+
+function endGame() {
+  playing = false;
+  document.getElementById('finalScore').textContent = playerName + "'s SCORE: " + score;
+  document.getElementById('gameOver').classList.remove('hidden');
+}
+
+function loop() {
+  update();
+  draw();
+  if (playing) requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
